@@ -1,0 +1,18 @@
+[Unit]
+Description=Publish %i as an IPv6 mDNS alias for this host
+After=avahi-daemon.service
+Requires=avahi-daemon.service
+
+[Service]
+Type=simple
+# Replace with your NAS's actual global IPv6 address (find it with:
+# ip -6 addr show <iface> scope global). Skip this unit entirely if your
+# network doesn't do IPv6 — just don't half-publish (see troubleshooting.md,
+# the "5-second stall" gotcha is specifically caused by publishing A without
+# a matching AAAA when clients expect dual-stack).
+ExecStart=/usr/bin/avahi-publish -a -R %i 2001:db8::1
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

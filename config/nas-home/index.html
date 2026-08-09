@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FamilyNAS</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card-bg: #1a1d24;
+    --card-border: #2a2e37;
+    --text: #e8e9ec;
+    --text-dim: #9aa0ab;
+    --accent: #5b8cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8vh 1.5rem 3rem;
+  }
+  h1 {
+    font-size: 2rem;
+    margin: 0 0 0.25rem;
+    letter-spacing: -0.02em;
+  }
+  p.sub {
+    color: var(--text-dim);
+    margin: 0 0 3rem;
+    font-size: 1rem;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+    width: 100%;
+    max-width: 780px;
+  }
+  a.card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    padding: 1.5rem;
+    text-decoration: none;
+    color: var(--text);
+    transition: transform 0.15s ease, border-color 0.15s ease;
+  }
+  a.card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+  }
+  .icon { font-size: 2rem; line-height: 1; }
+  .name { font-size: 1.15rem; font-weight: 600; }
+  .desc { font-size: 0.9rem; color: var(--text-dim); }
+  footer {
+    margin-top: 3rem;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+  <!-- Replace "FamilyNAS" and the card list below with your own server name and apps. -->
+  <h1>FamilyNAS</h1>
+  <p class="sub">Family server &mdash; pick an app</p>
+  <div class="grid">
+    <a class="card" href="http://photos.local">
+      <span class="icon">📷</span>
+      <span class="name">Photos</span>
+      <span class="desc">Photo &amp; video library (Immich)</span>
+    </a>
+    <a class="card" href="http://media.local">
+      <span class="icon">🎬</span>
+      <span class="name">Media</span>
+      <span class="desc">Movies &amp; music (Jellyfin)</span>
+    </a>
+    <!-- Add one card per additional app/hostname. -->
+  </div>
+  <footer>nas.local</footer>
+</body>
+</html>

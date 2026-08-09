@@ -1,0 +1,29 @@
+# Copy to /etc/caddy/Caddyfile and adjust hostnames/ports to match your setup.
+#
+# auto_https is disabled because .local names can't get real certificates
+# (no public CA will issue for them) — plain HTTP is the right call for a LAN.
+{
+	auto_https off
+}
+
+# Homepage / landing page — replace with your NAS's real hostname and IP.
+http://nas.local, http://192.0.2.10, http://localhost {
+	root * /var/www/nas-home
+	file_server
+}
+
+http://photos.local {
+	# IMPORTANT: use 127.0.0.1 literally, not "localhost" — see
+	# docs/troubleshooting.md for why "localhost" can add a multi-second
+	# dual-stack resolution delay to every request.
+	reverse_proxy 127.0.0.1:2283
+}
+
+http://media.local {
+	reverse_proxy 127.0.0.1:8096
+}
+
+# Add one block per additional app, each on its own hostname.
+# http://planner.local {
+# 	reverse_proxy 127.0.0.1:8787
+# }

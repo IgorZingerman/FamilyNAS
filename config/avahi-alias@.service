@@ -1,0 +1,14 @@
+[Unit]
+Description=Publish %i as an IPv4 mDNS alias for this host
+After=avahi-daemon.service
+Requires=avahi-daemon.service
+
+[Service]
+Type=simple
+# Replace 192.0.2.10 with your NAS's actual LAN IPv4 address.
+ExecStart=/usr/bin/avahi-publish -a -R %i 192.0.2.10
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

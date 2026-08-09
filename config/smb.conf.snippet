@@ -1,0 +1,54 @@
+# Append to /etc/samba/smb.conf (after the default [global] section).
+# Requires: `sudo groupadd familymedia`, per-user accounts added to that group
+# (see docs/setup-guide.md), and the target directories chgrp'd to
+# familymedia with mode 2775 before first use.
+
+#======================= Family Media Shares =======================
+
+[movies]
+   comment = Movies (Jellyfin library)
+   path = /tank/media/movies
+   valid users = @familymedia
+   force group = familymedia
+   create mask = 0664
+   directory mask = 2775
+   read only = no
+   browseable = yes
+   vfs objects = fruit streams_xattr
+   fruit:metadata = stream
+   fruit:model = MacSamba
+
+[music]
+   comment = Music (Jellyfin library)
+   path = /tank/media/music
+   valid users = @familymedia
+   force group = familymedia
+   create mask = 0664
+   directory mask = 2775
+   read only = no
+   browseable = yes
+   vfs objects = fruit streams_xattr
+   fruit:metadata = stream
+   fruit:model = MacSamba
+
+[timemachine]
+   comment = Time Machine backups (all family Macs)
+   path = /tank/backups/timemachine
+   valid users = @familymedia
+   force group = familymedia
+   create mask = 0664
+   directory mask = 2775
+   read only = no
+   browseable = yes
+   vfs objects = fruit streams_xattr
+   fruit:time machine = yes
+   # SET A REAL CAP before anyone enables this as a TM destination — without
+   # one, every Mac assumes the pool's *entire* free space is available to it.
+   fruit:time machine max size = 500G
+   fruit:metadata = stream
+   fruit:model = MacSamba
+   # TM's giant sparse-bundle band files are prone to locking issues without these:
+   durable handles = yes
+   kernel oplocks = no
+   kernel share modes = no
+   posix locking = no
