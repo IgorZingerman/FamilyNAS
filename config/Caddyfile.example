@@ -23,7 +23,9 @@ http://media.local {
 	reverse_proxy 127.0.0.1:8096
 }
 
-# Add one block per additional app, each on its own hostname.
-# http://planner.local {
-# 	reverse_proxy 127.0.0.1:8787
+# Extend this the same way for any additional self-hosted app: one more site
+# block, one more hostname, one more pair of avahi-alias@/avahi-alias6@
+# systemd units (see docs/setup-guide.md). For example:
+# http://<app-name>.local {
+# 	reverse_proxy 127.0.0.1:<app-port>
 # }

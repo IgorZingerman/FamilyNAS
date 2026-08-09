@@ -1,14 +1,29 @@
 # FamilyNAS
 
 A self-hosted family NAS built on commodity hardware: a private Apple Photos/iCloud
-replacement (Immich), a movie/music server (Jellyfin), a Samba file share for easy
-uploads from Mac/Windows clients, and a family trip planner — all reachable by
-plain, memorable hostnames instead of `hostname:port` URLs.
+replacement (Immich), a movie/music server (Jellyfin), and a Samba file share for
+easy uploads from Mac/Windows clients — all reachable by plain, memorable
+hostnames instead of `hostname:port` URLs.
 
 This repo documents the actual build: the hardware, the architecture decisions
 (and the ones we got wrong the first time), step-by-step setup instructions, and
 every gotcha we hit along the way. It's written so a friend with similar spare
 hardware can follow along and end up with the same result.
+
+The reverse-proxy/mDNS layer described here isn't limited to the two apps above
+— it was built to be extended. Adding another self-hosted app later is just
+one more Caddy site block and one more `<name>.local` alias (see
+[`docs/setup-guide.md`](docs/setup-guide.md#5-reverse-proxy-friendly-urls)); we
+already run a few other things this way on our own box.
+
+### A note on naming
+
+Our own server is called `igorbot` on our LAN — an arbitrary, personal choice
+with no significance beyond "that's what we named it." Every hostname in this
+repo (`nas.local`, `photos.local`, `media.local`, etc.) is a generic
+placeholder for the guide, not a name you're expected to reuse. Name yours
+whatever you want; nothing here depends on the specific name, only on being
+consistent about it across your own Caddyfile, Samba config, and mDNS aliases.
 
 ## What's in the stack
 
