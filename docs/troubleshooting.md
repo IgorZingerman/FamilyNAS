@@ -138,3 +138,38 @@ ground truth — it's more reliable than trusting any single stats endpoint,
 especially right after a large import while background jobs (thumbnail
 generation, metadata extraction, video transcoding) are still draining. Check
 `/api/jobs` for queue depth before concluding anything is actually missing.
+
+## `curl`'s exit code doesn't mean the HTTP request succeeded
+
+**Symptom:** a script shells out to `curl` to call an API, checks
+`subprocess.run(...).returncode`, and treats `0` as success — but the API call
+was actually rejected (e.g. `401 Unauthorized` due to a missing permission
+scope on an API key), and the script logs and behaves as if it worked.
+
+**Root cause:** curl's own exit code reflects whether curl itself managed to
+make the request and get *a* response — it's 0 as long as the connection
+succeeded and it received an HTTP response of any kind, including a 4xx or
+5xx. It does **not** reflect the HTTP status code. Concretely, this bit an
+Immich API key that was created with only `asset.upload` and `asset.read`
+permissions but was also used to tag assets as favorites (which needs
+`asset.update`) — the tagging call returned `401 Authentication required`,
+curl exited `0` because it successfully received that 401 response, and
+naive `returncode`-only error handling logged the operation as a success.
+
+**Fix:** never trust `returncode` alone for a curl-shelled-out API call. Use
+`curl -s -w '\n%{http_code}'` to append the actual HTTP status code to the
+output, split it off, and explicitly check it's in the 2xx range before
+treating the call as successful:
+
+```python
+result = subprocess.run(["curl", "-s", "-w", "\n%{http_code}"] + args,
+                         capture_output=True, text=True)
+body, _, status = result.stdout.rpartition("\n")
+if not status.isdigit() or not (200 <= int(status) < 300):
+    raise RuntimeError(f"HTTP {status}: {body.strip()[:200]}")
+```
+
+This generalizes beyond curl: any time a script shells out to a CLI tool that
+wraps a network call, "the subprocess exited 0" and "the operation actually
+succeeded" are two different claims, and conflating them is an easy way to
+build a pipeline that silently logs failures as successes.

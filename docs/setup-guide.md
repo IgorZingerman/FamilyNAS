@@ -206,11 +206,107 @@ stall, not a real performance problem.
   support offline caching and native CarPlay integration.
 - **File uploads**: Finder → `⌘K` → `smb://nas.local` (or click the server
   under Finder's Network sidebar once mDNS propagates), authenticate with a
-  Samba account from step 4.
+  Samba account from step 4. If you've set up the dropbox watcher (step 8),
+  point people at `smb://nas.local/dropbox` instead of the Immich web UI for
+  routine uploads.
 - **Time Machine**: add the `timemachine` share as a backup destination in
   System Settings — **only after** you've set a real `fruit:time machine max
   size` cap (see [`architecture.md`](architecture.md#why-samba-and-why-per-person-accounts)),
   since enabling it starts an automatic background backup immediately.
+
+## 8. Dropbox auto-ingestion (optional)
+
+Skip this section if the web UI / mobile app is enough for your family. See
+[`architecture.md`](architecture.md#why-a-drop-folder-instead-of-relying-on-the-web-ui)
+for the reasoning behind each choice below.
+
+**Create a real Immich account per family member** (if you haven't already —
+one shared login isn't enough here, since the whole point is per-person
+attribution):
+
+```bash
+curl -X POST http://<nas-ip>:2283/api/admin/users \
+  -H "Authorization: Bearer <your admin access token>" -H 'Content-Type: application/json' \
+  -d '{"email":"<name>@yourdomain.local","password":"<temp password>","name":"<name>","shouldChangePassword":true}'
+```
+
+**Generate a personal API key for each person** — log in as them (or use
+their access token) and:
+
+```bash
+curl -X POST http://<nas-ip>:2283/api/api-keys \
+  -H "Authorization: Bearer <their access token>" -H 'Content-Type: application/json' \
+  -d '{"name":"dropbox-watcher","permissions":["asset.upload","asset.read","asset.update"]}'
+```
+
+**`asset.update` is required, not optional**, if you want the `favorites/`
+auto-tagging to work — see
+[`troubleshooting.md`](troubleshooting.md#curls-exit-code-doesnt-mean-the-http-request-succeeded)
+for what happens if you leave it out (it fails in a way that looks like
+success unless you check for it).
+
+Store the keys where the watcher can read them, root-only:
+
+```bash
+sudo mkdir -p /etc/familynas
+sudo tee /etc/familynas/immich-api-keys.env << 'EOF'
+<name1>=<api-key-1>
+<name2>=<api-key-2>
+EOF
+sudo chmod 600 /etc/familynas/immich-api-keys.env
+```
+
+**Generate a Jellyfin API key** too (Dashboard → API Keys in the Jellyfin web
+UI, or `POST /Auth/Keys?App=dropbox-watcher` with an admin session token), and
+store it the same way:
+
+```bash
+echo '<jellyfin-api-key>' | sudo tee /etc/familynas/jellyfin-api-key
+sudo chmod 600 /etc/familynas/jellyfin-api-key
+```
+
+**Add the `dropbox` share and its folder tree**, same pattern as the other
+Samba shares:
+
+```bash
+sudo mkdir -p /tank/dropbox/photos/favorites /tank/dropbox/media \
+              /tank/dropbox/archive/photos /tank/dropbox/failed/photos /tank/dropbox/failed/media
+sudo chgrp -R familymedia /tank/dropbox
+sudo find /tank/dropbox -type d -exec chmod 2775 {} \;
+```
+
+Append the `[dropbox]` share block from
+[`config/smb.conf.snippet`](../config/smb.conf.snippet) to `/etc/samba/smb.conf`,
+`sudo testparm -s` to validate, `sudo systemctl reload smbd`.
+
+**Install `inotify-tools`** — the watcher's only new dependency:
+
+```bash
+sudo apt-get install -y inotify-tools
+```
+
+**Deploy the watcher script and its systemd service.** Copy
+[`config/dropbox-watcher.py`](../config/dropbox-watcher.py) to the server
+(e.g. `~/familynas/dropbox-watcher.py`), edit the path constants at the top to
+match your own dropbox/media locations, then install
+[`config/familynas-dropbox-watcher.service`](../config/familynas-dropbox-watcher.service):
+
+```bash
+sudo cp config/familynas-dropbox-watcher.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now familynas-dropbox-watcher
+sudo systemctl status familynas-dropbox-watcher   # confirm it's running, not crash-looping
+```
+
+**Test end to end** before trusting it: drop a test photo as one family
+account into `dropbox/photos/`, confirm it lands in Immich under the
+*matching* Immich account within a few seconds and the original moves to
+`dropbox/archive/photos/<date>/`; drop something into `dropbox/photos/favorites/`
+and confirm it's tagged as a favorite; drop an MP3 and a movie file into
+`dropbox/media/` and confirm each lands in the right Jellyfin library; then
+deliberately break something (e.g. temporarily corrupt one person's stored API
+key) and confirm the failure lands in `dropbox/failed/...` with a reason in
+`/var/log/familynas-dropbox.log`, rather than vanishing or getting stuck.
 
 ## Ongoing maintenance (not automated by this guide)
 

@@ -143,6 +143,83 @@ choices worth calling out:
   trusted home LAN), or anyone who wants a unique one runs `smbpasswd -U <name>
   -r <server>` from a machine with Samba's client tools installed.
 
+### Why a drop-folder instead of relying on the web UI
+
+Immich's web UI (drag-and-drop) is fine for a handful of photos, tedious for
+"I have a folder of vacation photos to get off my laptop." The fix is a
+watched drop-folder: family members copy files into a Samba share, and a
+background process picks them up automatically. A few decisions worth
+explaining:
+
+**Folder structure decides classification — no content sniffing needed.**
+The dropbox share has two top-level folders family members drop directly into:
+
+```
+dropbox/
+  photos/            <- photos & personal videos, imported into Immich
+    favorites/         <- same as above, plus auto-tagged as an Immich favorite
+                          (feeds Immich's built-in Favorites view — handy for
+                          things like pulling photos for a yearly calendar)
+  media/               <- movies & music together, routed into Jellyfin by file
+                          extension (audio -> music library, video -> movies library)
+  archive/photos/<date>/...   <- copies of successfully-imported photos (safety net)
+  failed/{photos,media}/...   <- anything that failed processing, never silently dropped
+```
+
+The obvious alternative — auto-detecting file type and guessing intent — has a
+real ambiguity problem: an `.mp4` could be a home video (belongs in Immich) or
+a ripped movie (belongs in Jellyfin), and there's no reliable way to tell them
+apart from the file alone. Splitting `photos/` (personal content, handled by
+Immich, which already supports videos) from `media/` (library content, handled
+by Jellyfin) removes that ambiguity — *within* `media/`, audio-vs-video by
+extension is safe, since that folder is never used for personal videos.
+
+**Attribution is nearly free.** Because the Samba accounts writing into this
+share don't use `force user` (see above), every dropped file already carries
+the uploader's UID as owner and its mtime as drop time. The watcher just reads
+`stat()` on each file — no separate tracking mechanism needed.
+
+**A watcher, not a poller.** `inotifywait -m -r -e close_write,moved_to`,
+running as a `Restart=always` systemd service, reacts within moments of a
+file finishing copying — `close_write` specifically fires only once the
+writer (Samba, on the uploading client's behalf) closes the file, so a file
+is never grabbed mid-copy. Events are processed one at a time deliberately,
+not in parallel: on modest hardware already busy running Immich's ML
+pipeline, queuing uploads sequentially is both simpler and considerably
+kinder to the box than firing a burst of concurrent API calls when someone
+drops fifty photos at once.
+
+**Photos are copied into Immich, then the original is archived, not
+deleted.** Immich has its own internal asset storage — uploading is a copy,
+not a move — so the dropbox original becomes a redundant safety net rather
+than the canonical copy. It's moved into a dated `archive/` folder rather than
+deleted, in keeping with a broader "never delete automatically, always
+quarantine" philosophy: automated pipelines that silently delete originals are
+one bug away from data loss, and a dated archive folder costs little to keep.
+
+**Movies/music are moved, not copied.** Unlike photos, the dropbox file *is*
+becoming its final canonical copy at `/tank/media/movies` or `/music` — there's
+nothing else to preserve, so a plain move is correct.
+
+**Failures never disappear silently.** Any error — upload failed, unrecognized
+file extension, missing credentials for that uploader — moves the file to
+`failed/<category>/` and logs the reason. A file that's left stuck in place
+looks like "nothing happened" to whoever dropped it; a file that's silently
+deleted on error is far worse. Every event (success or failure) is logged with
+timestamp, uploader, category, filename, and outcome — for movies/music this
+log is the *only* record of who uploaded what, since Jellyfin has no per-file
+uploader concept of its own.
+
+**Per-person Immich attribution requires per-person API keys.** For a dropped
+photo to show up owned by the actual person in Immich (not one shared
+uploader account), the watcher needs to act on that person's behalf — which
+means a real Immich account and a personal API key per family member, stored
+server-side (see [`docs/setup-guide.md`](setup-guide.md) for where and how).
+**The API key needs `asset.update` permission, not just `asset.upload` and
+`asset.read`**, if you want the favorites-tagging feature — see
+[`docs/troubleshooting.md`](troubleshooting.md) for what happens if you miss
+this (it fails silently in a non-obvious way).
+
 ### Why hostnames instead of ports, and why not path-based routing
 
 Nobody remembers `http://server:2283`. The fix is a reverse proxy (here, Caddy)
@@ -174,9 +251,17 @@ done here to keep scope small):
 
 | System | Login style | Scope |
 |---|---|---|
-| Samba shares | Linux system accounts (no shell) | File access to `movies`/`music`/`timemachine` shares |
+| Samba shares | Linux system accounts (no shell) | File access to `movies`/`music`/`timemachine`/`dropbox` shares |
 | Jellyfin | Its own username/password | Media library access |
 | Immich | Email/password | Photo library access |
+
+A fourth, server-side-only credential layer backs the dropbox watcher: one
+Immich **API key** per family member (distinct from their login password —
+used by the automation to upload on their behalf) plus one Jellyfin API key
+for triggering library scans. These aren't accounts a person logs into
+directly; they live in root-only files on the server (see
+[`docs/setup-guide.md`](setup-guide.md)) and should never be committed
+anywhere.
 
 Using the **same password across all three** for each person is a deliberate
 usability tradeoff for a home/family context — not a general security

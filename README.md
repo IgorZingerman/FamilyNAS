@@ -1,9 +1,10 @@
 # FamilyNAS
 
 A self-hosted family NAS built on commodity hardware: a private Apple Photos/iCloud
-replacement (Immich), a movie/music server (Jellyfin), and a Samba file share for
-easy uploads from Mac/Windows clients — all reachable by plain, memorable
-hostnames instead of `hostname:port` URLs.
+replacement (Immich), a movie/music server (Jellyfin), and a Samba drop-folder
+that auto-imports whatever family members drag into it — no web UI required
+for routine uploads — all reachable by plain, memorable hostnames instead of
+`hostname:port` URLs.
 
 This repo documents the actual build: the hardware, the architecture decisions
 (and the ones we got wrong the first time), step-by-step setup instructions, and
@@ -32,6 +33,7 @@ consistent about it across your own Caddyfile, Samba config, and mDNS aliases.
 | [Immich](https://immich.app/) | Photo/video library, Apple Photos replacement, mobile auto-backup | `http://photos.local` |
 | [Jellyfin](https://jellyfin.org/) | Movies & music streaming | `http://media.local` |
 | Samba (`smbd`) | Family upload access from Finder/Explorer | `smb://nas.local` |
+| Dropbox watcher | Auto-imports files dropped into the share into Immich/Jellyfin, attributed to whoever dropped them | `smb://nas.local/dropbox` |
 | [Caddy](https://caddyserver.com/) | Reverse proxy — turns ports into names | `http://nas.local` |
 
 ## Architecture at a glance
@@ -48,7 +50,8 @@ flowchart TB
         caddy["Caddy reverse proxy\n:80"]
         immich["Immich stack\n(server + ML + Postgres + Valkey)"]
         jellyfin["Jellyfin"]
-        smb["Samba\nmovies / music / timemachine shares"]
+        smb["Samba\nmovies / music / timemachine / dropbox shares"]
+        watcher["Dropbox watcher\n(inotify-triggered)"]
         zfs["ZFS pool\nraidz2 + mirror, USB-attached HDDs"]
         ssd["Boot SSD\nPostgres data + transcode cache"]
     end
@@ -56,10 +59,13 @@ flowchart TB
     mac -- mDNS lookup --> avahi
     phone -- mDNS lookup --> avahi
     mac -- HTTP --> caddy
-    mac -- SMB --> smb
+    mac -- SMB drop --> smb
     phone -- HTTPS/API --> caddy
     caddy --> immich
     caddy --> jellyfin
+    smb -- new file event --> watcher
+    watcher -- upload via API --> immich
+    watcher -- move file --> jellyfin
     immich --> ssd
     immich --> zfs
     jellyfin --> zfs
@@ -80,9 +86,11 @@ approach broke in a specific way.
 3. Keep [`docs/troubleshooting.md`](docs/troubleshooting.md) open — it documents
    every non-obvious failure we hit (Docker's silent bind-mount behavior, two
    separate Avahi/mDNS bugs, a JavaScript falsy-string trap, Immich's reverse-proxy
-   limitations) so you don't have to debug them from scratch.
+   limitations, a `curl`-exit-code trap in the dropbox watcher) so you don't
+   have to debug them from scratch.
 4. Reusable config templates (docker-compose, Caddyfile, Samba shares, systemd
-   units) live in [`config/`](config/) — copy and adapt, don't copy-paste blindly.
+   units, the dropbox watcher script) live in [`config/`](config/) — copy and
+   adapt, don't copy-paste blindly.
 
 ## Reference hardware
 

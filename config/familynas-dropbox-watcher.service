@@ -1,0 +1,17 @@
+[Unit]
+Description=FamilyNAS dropbox watcher (auto-import to Immich/Jellyfin)
+After=network.target docker.service smbd.service
+Requires=docker.service
+
+[Service]
+Type=simple
+# Adjust the path to wherever you deployed dropbox-watcher.py.
+ExecStart=/usr/bin/python3 /home/<youruser>/familynas/dropbox-watcher.py
+Restart=always
+RestartSec=5
+# Runs as root: needs to read files owned by every family member's Samba
+# account and move them across ownership boundaries.
+User=root
+
+[Install]
+WantedBy=multi-user.target
