@@ -251,6 +251,14 @@ reliably finishes inside the stall timeout instead of getting bounced.
 Counterintuitively, doing *less* work at once resolved it — the queue
 actually started draining once jobs stopped being redundantly repeated.
 
+**Watching progress:** [`scripts/queue_watch.py`](../scripts/queue_watch.py)
+polls each queue's depth over SSH, keeps a local history file between runs,
+and prints a table of recent checkpoints with deltas, a trend arrow per
+queue, and a rough ETA — along with a small hardware-temperature table if
+you're also watching for thermal issues (see
+[Hardware](architecture.md#hardware)). Update the `QUEUES` list and
+`TEMP_ZONES` mapping at the top of the script to match your own setup.
+
 ## Docker-Desktop-alternative VMs have their own fixed resource limits, separate from your host machine's
 
 **Symptom:** a container you've offloaded work to (see

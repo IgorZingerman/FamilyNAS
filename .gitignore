@@ -12,3 +12,6 @@ scripts/drobo_diagnostic_*.txt
 
 # Claude Code local session/settings directory
 .claude/
+
+# Personal runtime history for queue_watch.py — not meant to be shared
+scripts/.queue_watch_history.json
