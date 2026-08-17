@@ -31,6 +31,17 @@ build:
 - Check your NIC's actual negotiated speed (`ethtool <iface>`) before blaming
   slow transfers on anything else — a bad cable silently negotiating 100Mbps
   instead of Gigabit looks identical to a real bottleneck until you check.
+- **This CPU generation runs hot under sustained load** (photo-library ML
+  processing, not just idle file-serving) — package temperature reached the
+  low-to-mid 90s°C under a large bulk import, uncomfortably close to this
+  chip's throttle point. A passive heatsink plus a small fan (correctly
+  oriented — see [`docs/troubleshooting.md`](troubleshooting.md)) brought it
+  down to a comfortable margin. Don't assume "small NAS box" means "never
+  needs active cooling" once you add real compute workloads like Immich's ML
+  pipeline on top of file-serving.
+- **Check drive recording technology (SMR vs. CMR) before choosing a redundant
+  array layout** — see [Storage layout](#storage-layout) below; this
+  materially changed our pool design partway through the build.
 
 ## Storage layout
 
@@ -46,34 +57,63 @@ you snapshot/SMART/dataset management UI for free instead of hand-rolling it.
 Ubuntu + native `zfsutils-linux` is the right choice specifically when the box
 already has other jobs.
 
-### Why raidz2 + mirror instead of one big vdev
+### Why mirrors, not raidz2 — check your drive recording technology first
 
-With mismatched drive sizes (in our case 4×8TB + 3×4TB) and drives of uncertain
-health history, a single vdev spanning all drives would either truncate every
-drive to the smallest capacity (wasteful) or use raidz1 (only survives one
-failure — risky with drives whose reliability isn't yet proven). The layout used
-here:
+The original plan here **was** raidz2 across the size-matched 8TB drives (see
+git history of this doc for that reasoning — it's not wrong in general). It
+changed after checking each drive's model family with `smartctl -d sat -i
+/dev/sdX` and finding the 8TB drives were **SMR (shingled magnetic
+recording)**, not conventional (CMR) recording.
 
-- **raidz2 across the size-matched 8TB drives** — survives 2 simultaneous
-  failures, no capacity wasted since all members match.
-- **A separate mirror across the 4TB drives**, striped into the same pool.
-- **One drive deliberately excluded** from the pool entirely, reserved as a
-  physically separate `zfs send`/`receive` backup target — actual 3-2-1 backup
-  protection, not just redundancy within one pool (a pool, however redundant,
-  is still one failure domain for things like fire, theft, or a bad `zpool`
-  operation).
+**Why that matters specifically for raidz:** SMR drives write in overlapping
+shingled tracks and funnel incoming writes through a small conventional-recording
+cache before "washing" them onto the shingled zones in the background. A raidz
+resilver (rebuilding after a failed/replaced drive) is a large, sustained,
+scattered-write workload — exactly the pattern that overwhelms that cache.
+Real-world reports of this exact combination describe a resilver that should
+take hours stretching to multiple *days*, or timing out before completing —
+undermining the one moment raidz2 exists to handle safely. Given this project
+started because a NAS array had already failed once, that risk wasn't worth
+taking.
 
-If you don't have mismatched drives, a single raidz2 vdev across everything is
-simpler and equally sound.
+**Check before you commit to a layout:**
 
-**Sequencing tip:** if you don't have every intended drive available on day one,
-build the pool now with what you have as a narrower raidz2, and use [OpenZFS
-raidz expansion](https://openzfs.org/wiki/Raidz_expansion) (`zpool attach`,
-supported since OpenZFS 2.3) to widen it later without ever dropping below your
-target redundancy level. The parity level (raidz2) is fixed at vdev creation and
-survives expansion — only the width changes. Data written before expansion keeps
-a less space-efficient ratio permanently, but that's a one-time, non-dangerous
-cost, not a design flaw.
+```bash
+smartctl -d sat -i /dev/sdX | grep -i "model family\|device model"
+```
+
+Model families containing "SMR" in their description (or a quick web search of
+the exact model number) tell you which recording technology you have. **If your
+drives are conventional (CMR)**, raidz2 remains a perfectly sound,
+more storage-efficient choice — none of this applies to you.
+
+**What we built instead**, given 4×8TB + 3×4TB owned (one 8TB and one 4TB held
+back, not part of this pool):
+
+- **A 2-way mirror across two of the 8TB drives**, with the third 8TB held
+  as a **hot spare** — ZFS swaps it in automatically the moment a mirror
+  member fails, without any manual intervention.
+- **A separate 2-way mirror across the 4TB drives**, striped into the same pool.
+- The remaining 8TB and 4TB drives deliberately excluded from the pool
+  entirely, reserved as a future physically separate `zfs send`/`receive`
+  backup target — actual 3-2-1 backup protection, not just redundancy within
+  one pool (a pool, however redundant, is still one failure domain for things
+  like fire, theft, or a bad `zpool` operation).
+
+At this drive count, **mirrors and raidz2 give identical usable capacity** —
+both lose exactly one drive's worth of space per matched pair — so this cost
+nothing in storage efficiency, only gained a resilver pattern (a simple
+sequential copy) that's far gentler on SMR drives than raidz's scattered
+rebuild I/O, plus a hot spare that heals a lost mirror member automatically.
+
+**Sequencing tip:** if you don't have every intended drive available on day
+one, build the pool now with the mirrors you can, and `zpool add` another
+mirror vdev later once more drives free up — ZFS stripes it into the existing
+pool automatically. (The equivalent move for a raidz2-based layout is
+[OpenZFS raidz expansion](https://openzfs.org/wiki/Raidz_expansion)
+(`zpool attach`, supported since OpenZFS 2.3) instead — same idea, different
+mechanism, since raidz vdevs widen in place rather than getting striped
+alongside a new one.)
 
 ### Why the database and transcode cache live on the boot SSD, not the pool
 
@@ -107,6 +147,55 @@ generic `postgres:16` image will not work, and a mismatched custom image can
 break on upgrade. Jellyfin isn't part of Immich's release, so it gets
 hand-appended as an extra service in the same compose file (see
 [`config/docker-compose.yml`](../config/docker-compose.yml)).
+
+### Offloading Immich's ML workload to a second machine
+
+If your NAS hardware is modest (see [Hardware](#hardware) above), a large bulk
+photo import can genuinely overwhelm it — not just slowly, but in a way that
+gets *worse* over time. What we hit: after importing several hundred thousand
+photos, system load average climbed to roughly 5x the CPU's core count.
+Under that much contention, the background job queue's stalled-worker
+detection assumed jobs had died (workers couldn't check in fast enough) and
+re-queued already-in-progress work — creating a loop where the backlog grew
+even though real processing was happening. **Lowering job concurrency**
+(Admin → System Settings → Job Settings in Immich) so each job actually
+finishes before hitting that stall timeout fixed the loop — fewer jobs running
+in parallel, but the total queue actually drained instead of regenerating.
+
+The bigger fix, if you have any other capable machine on the same LAN sitting
+idle: **Immich's ML workload is a genuinely separable microservice**, not a
+hack to split off. Face detection, search embeddings (CLIP), and OCR all run
+through `immich-machine-learning`, which the server talks to over HTTP — it
+doesn't have to run on the same box as everything else.
+
+**What can move, and what can't:**
+- **Can offload:** face detection/recognition, smart search embeddings, OCR —
+  anything that routes through `immich-machine-learning`.
+- **Can't offload this way:** thumbnail generation and video transcoding —
+  these run inside the main Immich server's own job workers, not the ML
+  service, and Immich doesn't support clustering multiple server instances
+  against one database. They stay on whichever machine hosts Immich itself.
+
+**How:** run `immich-machine-learning` (**matching your server's exact
+version tag** — the server/ML communication protocol isn't guaranteed
+compatible across versions) on the other machine, with a persistent volume for
+its model cache and port `3003` published. Then in Immich's admin System
+Settings → Machine Learning, point `Machine Learning URLs` at that machine's
+`http://<lan-ip>:3003` instead of the local instance, and stop the
+now-redundant local ML container to actually free its resources.
+
+**If that second machine runs Docker Desktop or an alternative like Rancher
+Desktop:** these tools run containers inside a lightweight VM with a **fixed
+resource allocation separate from the host's total RAM/CPU** — by default,
+usually far too small to hold multiple ML models loaded simultaneously.
+See [`docs/troubleshooting.md`](troubleshooting.md) for what that looked like
+and the fix.
+
+Once genuinely offloaded, there's often real headroom to push further: with
+compute no longer local, you can also raise per-job-type concurrency for the
+now-offloaded job types specifically (they're no longer contending with the
+original machine's CPU), meaningfully increasing throughput beyond just
+relocating the work.
 
 ### Why Samba, and why per-person accounts
 

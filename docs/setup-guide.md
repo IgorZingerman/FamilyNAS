@@ -9,6 +9,10 @@ Throughout: replace `nas` with whatever hostname you actually pick, and replace
 every password placeholder with your own — **do not reuse the example values
 verbatim.**
 
+Migrating data from an old or failed NAS onto this new pool? See
+[`data-recovery.md`](data-recovery.md) first — worth doing the dedup pass
+*before* you import anything, not after.
+
 ## 1. Base OS + ZFS
 
 ```bash
@@ -28,11 +32,15 @@ sudo smartctl -t long /dev/sdX         # long self-test; takes hours, check smar
 ```
 
 Create the pool matching your own drive layout (see
-[`architecture.md`](architecture.md#storage-layout) for the reasoning):
+[`architecture.md`](architecture.md#storage-layout) for the reasoning, **especially
+the note on checking SMR vs. CMR before picking raidz2 vs. mirrors**):
 
 ```bash
-sudo zpool create tank raidz2 /dev/disk/by-id/<disk1> /dev/disk/by-id/<disk2> /dev/disk/by-id/<disk3> /dev/disk/by-id/<disk4>
-sudo zpool add tank mirror /dev/disk/by-id/<disk5> /dev/disk/by-id/<disk6>
+# Mirrored vdevs, striped into one pool — see architecture.md for why this was
+# chosen over raidz2 here. Swap for a raidz2 layout if your drives are CMR.
+sudo zpool create tank mirror /dev/disk/by-id/<disk1> /dev/disk/by-id/<disk2>
+sudo zpool add tank mirror /dev/disk/by-id/<disk3> /dev/disk/by-id/<disk4>
+sudo zpool add tank spare /dev/disk/by-id/<disk5>   # optional hot spare
 ```
 
 Always reference drives by `/dev/disk/by-id/...`, never `/dev/sdX` — device
@@ -45,7 +53,9 @@ sudo zfs create -o recordsize=1M tank/apps/immich/data
 sudo zfs create tank/apps/jellyfin/config
 sudo zfs create tank/media/movies
 sudo zfs create tank/media/music
+sudo zfs create tank/media/tv
 sudo zfs create tank/backups/timemachine
+sudo zfs create tank/archive
 ```
 
 ## 2. Boot-disk prep (Postgres + transcode cache)

@@ -52,7 +52,7 @@ flowchart TB
         jellyfin["Jellyfin"]
         smb["Samba\nmovies / music / timemachine / dropbox shares"]
         watcher["Dropbox watcher\n(inotify-triggered)"]
-        zfs["ZFS pool\nraidz2 + mirror, USB-attached HDDs"]
+        zfs["ZFS pool\nmirror + mirror, USB-attached HDDs"]
         ssd["Boot SSD\nPostgres data + transcode cache"]
     end
 
@@ -78,6 +78,10 @@ approach broke in a specific way.
 
 ## Getting started
 
+0. **Migrating data from an old/failed NAS first?** See
+   [`docs/data-recovery.md`](docs/data-recovery.md) — a dedup/classification
+   pipeline for turning a pile of overlapping backup drives into a clean import,
+   before you ever touch the steps below.
 1. Read [`docs/architecture.md`](docs/architecture.md) first — it explains *why*
    the stack is shaped this way, which matters more than the exact commands if
    your hardware differs from ours.

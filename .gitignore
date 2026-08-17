@@ -3,3 +3,12 @@
 .DS_Store
 __pycache__/
 *.pyc
+
+# Personal recovered-data manifests and diagnostic dumps — never share these
+scan_results/
+logs/
+scripts/drobo_diagnostic_*.txt
+*.csv
+
+# Claude Code local session/settings directory
+.claude/
