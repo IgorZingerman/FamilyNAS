@@ -20,6 +20,13 @@ services:
     volumes:
       - ${UPLOAD_LOCATION}:/data
       - /etc/localtime:/etc/localtime:ro
+    # GPU access for hardware-accelerated video transcoding — see
+    # docs/troubleshooting.md ("Immich doesn't inherit Jellyfin's GPU access")
+    # for why this needs adding here separately even if Jellyfin already has it.
+    devices:
+      - /dev/dri:/dev/dri   # Intel QuickSync passthrough; omit if no compatible iGPU
+    group_add:
+      - '991'   # replace with your host's actual `render` group GID: getent group render
     env_file:
       - .env
     ports:

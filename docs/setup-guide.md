@@ -99,6 +99,16 @@ Immich's upstream file changes over time). Key details:
   QuickSync hardware transcoding — find your `render` group's GID with
   `getent group render`.
 - Volumes point at the ZFS dataset paths from step 1.
+- **Add the same `devices`/`group_add` block to `immich-server` too**, not
+  just `jellyfin` — Immich does its own separate video transcoding and
+  doesn't inherit GPU access from another container just because it's on the
+  same host (see [`config/docker-compose.yml`](../config/docker-compose.yml)
+  for both). Then in Immich's admin UI (Administration → Settings →
+  Video Transcoding Settings), set **Hardware Acceleration** to your GPU
+  type (`qsv` for Intel QuickSync). Both the compose device access *and*
+  this setting are required — either alone leaves it transcoding on CPU. See
+  [`docs/troubleshooting.md`](troubleshooting.md) if you hit an "unhealthy"
+  status right after enabling this.
 
 ```bash
 docker compose config   # validates before you commit to `up`

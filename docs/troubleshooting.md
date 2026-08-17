@@ -308,3 +308,63 @@ not just positioned nearby, and (2) there's an actual exit path for the
 now-heated air once it's passed through — an open vent, a gap in the case,
 anywhere it can leave rather than circulate. Both matter; either alone isn't
 enough.
+
+## Immich doesn't inherit Jellyfin's GPU access, even on the same host
+
+**Symptom:** Jellyfin's Intel QuickSync hardware transcoding already works
+(fast, low CPU), but Immich's own video transcoding (`videoConversion` jobs)
+is still visibly slow and CPU-bound — no errors, it just never gets faster.
+
+**Root cause:** GPU device access in Docker is granted per-container, not
+per-host. Jellyfin having `devices: ["/dev/dri:/dev/dri"]` in its own service
+block says nothing about `immich-server`'s container, which does its own
+separate ffmpeg-based transcoding and needs the exact same device
+passthrough independently.
+
+**Fix:** two things, both required — neither alone is enough:
+1. Add the same `devices`/`group_add` block to `immich-server` in your
+   compose file that Jellyfin already has (see
+   [`config/docker-compose.yml`](../config/docker-compose.yml)) and recreate
+   the container.
+2. In Immich's admin UI (Administration → Settings → Video Transcoding
+   Settings), explicitly set **Hardware Acceleration** to match your GPU
+   (`qsv` for Intel QuickSync) — device access alone doesn't make Immich
+   *use* the GPU, it's a separate opt-in setting. Confirm it's actually
+   active by checking `immich_server`'s logs for `"...with QSV-accelerated
+   encoding and decoding"` on a freshly-started transcode job — logs still
+   saying `"...without hardware acceleration"` mean one of the two steps
+   above didn't take.
+
+Real result from making this change: video transcode throughput went from
+roughly one video every several seconds to several videos per second, and
+CPU package temperature *dropped* a couple degrees under the same workload
+(GPU now doing the encode/decode work instead of the CPU) — worth doing on
+any Intel NAS box running both apps together.
+
+## Recreating `immich-server` can trigger a large, blocking reindex if you've imported a lot since its last restart
+
+**Symptom:** you recreate the `immich-server` container for an unrelated
+config change (e.g. adding GPU device access, bumping a resource limit) and
+it comes up reporting `unhealthy` for several minutes — the API doesn't
+respond at all (connection refused / timeout) during this window, even
+though the container itself is running and not crash-looping.
+
+**Root cause:** on startup, Immich checks whether its Postgres vector
+indexes (`face_index`, `clip_index`) need rebuilding based on how much the
+underlying tables have grown. After a large bulk import, the answer can be
+"yes, substantially" — logs will show `Reindexing face_index (This may take
+a while, do not restart)` and similar for `clip_index`. This is a real,
+CPU-intensive `CREATE INDEX` + `VACUUM ANALYZE` operation running inside
+Postgres (confirm with `SELECT pid, state, query FROM pg_stat_activity WHERE
+state != 'idle'` if you want to see it actively working rather than take it
+on faith), not a hang — but the server can't answer API requests until it
+finishes, and it can genuinely take many minutes on hundreds of thousands of
+rows.
+
+**Fix:** don't restart the container again while this is running — the log
+message's "do not restart" warning is not a suggestion; interrupting it
+mid-rebuild is the actual risk here, not the wait itself. Just wait it out;
+`docker logs -f immich_server` will show it transition back to normal
+request-handling log lines once done. If you're about to recreate
+`immich-server` for a planned change right after a big import, expect this
+and don't be alarmed by several minutes of "unhealthy."

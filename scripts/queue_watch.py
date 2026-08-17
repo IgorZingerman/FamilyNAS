@@ -25,7 +25,12 @@ from datetime import datetime
 from pathlib import Path
 
 # (queue name, where it actually runs) - update this if you offload
-# different/additional queues elsewhere.
+# different/additional queues elsewhere. "NUC" queues run on whatever host
+# runs immich-server itself and can't be offloaded elsewhere (see
+# docs/architecture.md); videoConversion specifically got much faster once
+# QuickSync GPU acceleration was enabled for it (see docs/troubleshooting.md,
+# "Immich doesn't inherit Jellyfin's GPU access") - still runs on NUC, just
+# faster now, so no change needed here beyond this note.
 QUEUES = [
     ("thumbnailGeneration", "NUC"),
     ("faceDetection", "Mac"),
