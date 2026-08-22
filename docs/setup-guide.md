@@ -289,11 +289,18 @@ sudo chmod 600 /etc/familynas/jellyfin-api-key
 Samba shares:
 
 ```bash
-sudo mkdir -p /tank/dropbox/photos/favorites /tank/dropbox/media \
+sudo mkdir -p /tank/dropbox/photos/favorites \
+              /tank/dropbox/media/movies /tank/dropbox/media/tv /tank/dropbox/media/music \
               /tank/dropbox/archive/photos /tank/dropbox/failed/photos /tank/dropbox/failed/media
 sudo chgrp -R familymedia /tank/dropbox
 sudo find /tank/dropbox -type d -exec chmod 2775 {} \;
 ```
+
+The `media/movies`, `media/tv`, and `media/music` subfolders exist because
+movie vs. TV episode can't be told apart from file extension alone — the
+watcher routes by which subfolder a file was dropped into, only falling back
+to an audio/video extension guess (which can only tell audio from video, not
+movie from TV) for anything dropped loose directly into `media/`.
 
 Append the `[dropbox]` share block from
 [`config/smb.conf.snippet`](../config/smb.conf.snippet) to `/etc/samba/smb.conf`,

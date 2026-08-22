@@ -23,10 +23,11 @@ FAILED_PHOTOS_DIR = os.path.join(DROPBOX_ROOT, "failed", "photos")
 FAILED_MEDIA_DIR = os.path.join(DROPBOX_ROOT, "failed", "media")
 
 # Where media/ contents get moved. These must match whatever your Jellyfin
-# docker-compose.yml actually mounts as its movie/music library paths — if
+# docker-compose.yml actually mounts as its movie/tv/music library paths — if
 # you ever repoint one, repoint the other (see docs/troubleshooting.md's
 # "config-drift" gotcha in the full write-up this repo is based on).
 MOVIES_DEST = "/tank/media/movies"
+TV_DEST = "/tank/media/tv"
 MUSIC_DEST = "/tank/media/music"
 
 IMMICH_URL = "http://127.0.0.1:2283"
@@ -185,10 +186,24 @@ def handle_media(path, jf_key):
     uploader = owner_username(path)
     ext = os.path.splitext(filename)[1].lower()
 
-    if ext in AUDIO_EXTS:
+    # Movie vs. TV episode can't be told apart from file extension alone, so
+    # media/movies, media/tv, and media/music subfolders are the source of
+    # truth for routing - only fall back to the audio/video extension guess
+    # (which can't distinguish movie from TV) for a file dropped loose
+    # directly into media/ with no subfolder.
+    rel = os.path.relpath(path, os.path.join(DROPBOX_ROOT, "media"))
+    subfolder = rel.split(os.sep)[0] if os.sep in rel else None
+
+    if subfolder == "movies":
+        dest_dir, kind = MOVIES_DEST, "movie"
+    elif subfolder == "tv":
+        dest_dir, kind = TV_DEST, "tv show"
+    elif subfolder == "music":
+        dest_dir, kind = MUSIC_DEST, "music"
+    elif ext in AUDIO_EXTS:
         dest_dir, kind = MUSIC_DEST, "music"
     elif ext in VIDEO_EXTS:
-        dest_dir, kind = MOVIES_DEST, "movie"
+        dest_dir, kind = MOVIES_DEST, "movie (dropped loose in media/ - use media/movies or media/tv next time)"
     else:
         move_to(path, FAILED_MEDIA_DIR)
         log_event(uploader, "media", filename, "failed", f"unrecognized extension '{ext}'")

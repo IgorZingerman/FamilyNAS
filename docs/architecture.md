@@ -249,19 +249,25 @@ dropbox/
     favorites/         <- same as above, plus auto-tagged as an Immich favorite
                           (feeds Immich's built-in Favorites view — handy for
                           things like pulling photos for a yearly calendar)
-  media/               <- movies & music together, routed into Jellyfin by file
-                          extension (audio -> music library, video -> movies library)
+  media/
+    movies/            <- routed into Jellyfin's movies library
+    tv/                <- routed into Jellyfin's TV Shows library
+    music/             <- routed into Jellyfin's music library
   archive/photos/<date>/...   <- copies of successfully-imported photos (safety net)
   failed/{photos,media}/...   <- anything that failed processing, never silently dropped
 ```
 
 The obvious alternative — auto-detecting file type and guessing intent — has a
-real ambiguity problem: an `.mp4` could be a home video (belongs in Immich) or
-a ripped movie (belongs in Jellyfin), and there's no reliable way to tell them
-apart from the file alone. Splitting `photos/` (personal content, handled by
-Immich, which already supports videos) from `media/` (library content, handled
-by Jellyfin) removes that ambiguity — *within* `media/`, audio-vs-video by
-extension is safe, since that folder is never used for personal videos.
+real ambiguity problem: an `.mp4` could be a home video (belongs in Immich), a
+ripped movie, or a TV episode, and there's no reliable way to tell a movie
+apart from a TV episode from the file alone (both are just video files with
+similar extensions). Splitting `photos/` (personal content, handled by Immich)
+from `media/` (library content, handled by Jellyfin) resolves the
+photo-vs-media ambiguity; **within** `media/`, movie-vs-TV is resolved by which
+subfolder the file was dropped into rather than guessed — a file dropped loose
+directly in `media/` with no subfolder falls back to an audio/video extension
+guess, which can only get you as far as "definitely music," defaulting
+anything video-shaped to movies.
 
 **Attribution is nearly free.** Because the Samba accounts writing into this
 share don't use `force user` (see above), every dropped file already carries
@@ -356,3 +362,43 @@ Using the **same password across all three** for each person is a deliberate
 usability tradeoff for a home/family context — not a general security
 recommendation, but reasonable when the alternative is family members unable to
 remember which of three unrelated systems wants which password.
+
+### Immich has no real concept of a jointly-owned library
+
+Worth deciding **before** you pick per-person vs. shared Immich accounts, not
+after a bulk import: every Immich asset has exactly one owner, permanently.
+There's no ownership-transfer feature and no way to grant another account
+write access (move, delete, edit, organize into albums) over assets it doesn't
+own.
+
+The built-in **Partner Sharing** feature (Account Settings → Partner Sharing)
+looks like it solves this, but it's read-only by design — a partner can browse
+and download everything in your library, but can't touch it. This is
+intentional on Immich's part, not a bug: it protects each account's library
+even from other trusted accounts on the same server, including admins (an
+admin account gets server/user management capabilities, not a backdoor into
+individually curating someone else's personal timeline).
+
+This bit us directly: a large recovered family photo library ended up
+uploaded entirely under one person's account, and the other spouse — despite
+being an equal owner of that content in every real sense — had no way to
+delete duplicates, fix albums, or reorganize any of it under their own login.
+Partner Sharing let them *see* everything, but not touch it.
+
+**If a library is genuinely jointly owned/managed** (the common case for a
+couple or family's shared photo collection, as opposed to one person's private
+photos), the two real options are:
+
+- **Share the login credentials for whichever account owns that content.**
+  Not elegant, but it's the only way to get real write access, and for a
+  two-person household it's a perfectly reasonable choice — you're not
+  protecting the content from each other.
+- **Consolidate onto one shared account for jointly-owned content up front**,
+  before a bulk import, and reserve individual accounts for content that's
+  genuinely personal (e.g. each person's own phone camera roll via the mobile
+  app's auto-backup). Retrofitting this after a large import means either
+  re-uploading everything under the new account (no ownership-transfer API to
+  do it in place) or living with the credential-sharing workaround above.
+
+Decide this **before** running a large import, not after — it's much easier to
+land content under the right account from the start than to move it later.

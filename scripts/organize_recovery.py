@@ -403,6 +403,20 @@ def dest_root_for(category, args):
     sys.exit(f"No destination given for category '{category}' - pass --dest or --dest-{category}")
 
 
+def fast_copy(src, dest, bufsize=8 * 1024 * 1024):
+    """Like shutil.copy2, but uses an explicit large-buffer read/write loop
+    instead of shutil's automatic os.sendfile()/fcopyfile() fast-path
+    selection. That automatic fast-path was observed to degrade badly
+    (~12MB/s vs ~85-100MB/s for plain `cp`/`dd`) when copying off a
+    non-standard kernel filesystem module (linux-apfs-rw, used to read an
+    APFS source drive) - reason not fully diagnosed, but an explicit
+    read/write loop reliably matches `cp`-level throughput regardless of
+    the source filesystem's sendfile() support/quirks."""
+    with open(src, "rb") as fsrc, open(dest, "wb") as fdst:
+        shutil.copyfileobj(fsrc, fdst, length=bufsize)
+    shutil.copystat(src, dest)
+
+
 def cmd_transfer(args):
     remaps = parse_remap(args.remap)
     manifest_rows = {}
@@ -485,7 +499,7 @@ def cmd_transfer(args):
         for src, dest, cat, size in plan:
             dest.parent.mkdir(parents=True, exist_ok=True)
             try:
-                shutil.copy2(str(src), str(dest))
+                fast_copy(str(src), str(dest))
                 w.writerow([str(src), str(dest), cat, size])
                 copied += 1
             except OSError as e:
@@ -620,7 +634,7 @@ def cmd_sort_media(args):
     for src, target in final_plan:
         target.parent.mkdir(parents=True, exist_ok=True)
         if args.copy:
-            shutil.copy2(str(src), str(target))
+            fast_copy(str(src), str(target))
         else:
             shutil.move(str(src), str(target))
     print(f"Done. {len(final_plan)} files organized under {dest_root}")

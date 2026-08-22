@@ -368,3 +368,123 @@ mid-rebuild is the actual risk here, not the wait itself. Just wait it out;
 request-handling log lines once done. If you're about to recreate
 `immich-server` for a planned change right after a big import, expect this
 and don't be alarmed by several minutes of "unhealthy."
+
+## `shutil.copy2()` can silently run 5-8x slower than `cp` against a non-standard kernel filesystem
+
+**Symptom:** a Python file-copy script (in this case, `organize_recovery.py`'s
+`transfer` command) runs at ~12MB/s copying files, while `cp` or `dd` against
+the exact same source file on the exact same source/destination pair hits
+85-100MB/s. The slowdown isn't universal — it's specific to reading from a
+particular source filesystem.
+
+**Diagnosis approach:** isolate variables one at a time rather than guessing.
+`dd if=<file> of=/dev/null bs=1M` measured raw *read* throughput at
+100MB/s+, proving the source disk/filesystem itself wasn't the bottleneck.
+Plain `cp` on a different real file from the same source, timed by hand,
+matched that ~85MB/s. That leaves exactly one variable: the Python script's
+own copy mechanism.
+
+**Root cause:** `shutil.copy2()` automatically tries to use zero-copy
+fast-path syscalls (`os.sendfile()` on Linux, `fcopyfile()` on macOS) instead
+of a plain read/write loop, when it thinks the underlying filesystem
+supports them efficiently. In this case the source was mounted via
+`linux-apfs-rw` — a third-party, out-of-tree kernel module providing APFS
+read support on Linux (used to recover data from an old macOS-formatted
+drive) — and `sendfile()`'s fast path apparently degrades badly against it,
+for reasons not fully root-caused (a reasonable guess is the module doesn't
+implement the same efficient in-kernel data path a mainstream filesystem
+does, so `sendfile()` ends up worse than a plain buffered copy instead of
+better). This is specific to unusual/non-mainstream filesystem drivers —
+copying between two ordinary filesystems (ext4, XFS, APFS-on-macOS itself,
+etc.) is exactly the case `sendfile()` is supposed to help with.
+
+**Fix:** bypass `shutil.copy2()`'s automatic fast-path selection with an
+explicit buffered copy:
+
+```python
+def fast_copy(src, dest, bufsize=8 * 1024 * 1024):
+    with open(src, "rb") as fsrc, open(dest, "wb") as fdst:
+        shutil.copyfileobj(fsrc, fdst, length=bufsize)
+    shutil.copystat(src, dest)
+```
+
+This reliably matched `cp`-level throughput regardless of the source
+filesystem's `sendfile()` support/quirks. **General lesson:** if a Python
+copy loop is mysteriously slow against one particular filesystem/mount while
+`cp`/`dd` on the identical files are fast, suspect `shutil`'s automatic
+fast-path selection before suspecting your own code's logic — it's invisible
+in a stack trace or profiler line count, since the slow part is happening
+inside a syscall `shutil` chose on your behalf.
+
+## Firefox's DNS-over-HTTPS breaks `.local`/mDNS hostnames
+
+**Symptom:** a `.local` hostname (e.g. `photos.local`, served via mDNS/Avahi
+the way everything in this repo is) works fine in Safari, `ping`, and Time
+Machine's disk picker, but fails to resolve in Firefox specifically — Firefox
+reports it can't find the site, on a machine where every other resolution path
+works.
+
+**Root cause:** Firefox has DNS-over-HTTPS (DoH) enabled by default in many
+regions, which sends DNS queries to an external resolver (typically
+Cloudflare) over HTTPS instead of asking the OS's native resolver. That
+external resolver has no knowledge of your LAN's mDNS names and correctly
+returns "this doesn't exist" — a clean, valid negative response, not a
+timeout or error. Firefox's fallback-to-OS-resolver logic normally only
+triggers when the DoH resolver is *unreachable*, not when it gives a valid
+"not found" answer, so it never falls through to the OS resolver that would
+have handled `.local` correctly via Bonjour/mDNSResponder (macOS) or
+`nss-mdns` (Linux). Safari, `ping`, and anything else using the OS resolver
+directly never hits this, which is the tell — if only one browser fails while
+everything else on the same machine works, suspect that browser's own DNS
+path rather than the server.
+
+**Fix:** in Firefox, go to Settings → General → scroll to "Network Settings"
+→ Settings... → uncheck **"Enable DNS over HTTPS."** Alternatively, leave DoH
+on and exclude local domains specifically: `about:config` →
+`network.trr.excluded-domains` → add `local`, or set `network.trr.mode` to
+`5` (disabled by user choice). No separate cache-flush is needed — this isn't
+a caching problem, it's a resolver returning a genuine (if useless, for your
+purposes) answer every time.
+
+## Bulk-importing an unfamiliar music library can hit MusicBrainz's rate limit hard
+
+**Symptom:** after pointing Jellyfin at a large, freshly-reorganized music
+library (thousands of artist folders it's never seen before), the library
+scan's progress bar crawls to a near-stop partway through and stays there for
+a long time, even though the process is still technically "Running."
+
+**Root cause:** Jellyfin looks up artist/album metadata (photos, bios, sort
+names) from MusicBrainz's free public API by default. MusicBrainz enforces a
+strict per-client rate limit (roughly 1 request/second for anonymous
+clients). Pointing Jellyfin at thousands of never-before-seen artists in one
+scan means thousands of individual lookups queued up against that limit —
+`docker logs jellyfin` (or its own log files under `/config/log/`) will show
+repeated `HTTP 503 - The MusicBrainz web server is currently busy` errors
+during this window, which is MusicBrainz's rate limiter, not a Jellyfin bug
+or a network problem on your end.
+
+**Fix:** there isn't one that speeds this up — it's an external service's
+rate limit, working as designed. What matters is knowing it's *not* actually
+stuck: local playback and browsing already work off the files/folder
+structure on disk the moment the scan indexes them; only the cosmetic
+metadata (artist images, bios) trickles in slowly afterward as MusicBrainz
+allows more requests through. Don't kill and restart the scan thinking
+something's wrong — that just restarts the same rate-limited queue from
+scratch.
+
+## Immich has no cross-account write access, even for jointly-owned content
+
+**Symptom:** a family/household photo library that should logically belong
+to everyone ends up entirely under one person's Immich account after a bulk
+import, and there's no setting that lets a second account manage
+(delete/edit/reorganize) that content under their own login — Partner Sharing
+only grants read/download access.
+
+**Root cause:** every Immich asset has exactly one owner, and there's no
+ownership-transfer API and no "grant another account write access to my
+library" feature. This is a deliberate design boundary, not a missing
+feature waiting to be toggled on — see
+[`architecture.md`](architecture.md#immich-has-no-real-concept-of-a-jointly-owned-library)
+for the full reasoning and what to do about it (short version: share login
+credentials for jointly-owned content, or consolidate onto one account
+*before* a large import rather than after).
