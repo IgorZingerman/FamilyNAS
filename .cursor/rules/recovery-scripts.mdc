@@ -1,0 +1,34 @@
+---
+description: Python script conventions for recovery and NAS maintenance tools
+globs: scripts/**/*.py
+alwaysApply: false
+---
+
+# Recovery & maintenance scripts
+
+Applies to `scripts/*.py`. See [docs/data-recovery.md](../../docs/data-recovery.md) for the full recovery workflow.
+
+## Conventions
+
+- **Dry-run by default** — print planned actions; gate real writes behind `--apply`
+- **Never hard-delete** — move to quarantine/archive or Immich soft-trash; log skips
+- **Stdlib-first** — `organize_recovery.py` has no third-party deps; only add deps when necessary (e.g. `mutagen` in `reorganize_music.py`)
+- **Docstring usage block** — keep `Usage:` examples in the module docstring current when CLI changes
+
+## Script roles
+
+| Script | Runs on | Notes |
+| ------ | ------- | ----- |
+| `organize_recovery.py` | Mac (external volumes) | scan / merge-dupes / transfer pipeline |
+| `reorganize_music.py` | NAS or Mac | writes to sibling `music_organized` tree |
+| `queue_watch.py` | Mac | SSH to `igorbot.local`, local history file |
+| `build_albums.py` | NAS | localhost Immich API + transfer log |
+| `archive_cleanup.py` | NAS | Immich soft-trash after verified archive copy |
+
+## Verification
+
+```bash
+python3 -m py_compile scripts/<changed>.py
+```
+
+Dry-run the affected subcommand before suggesting `--apply`.

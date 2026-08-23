@@ -98,6 +98,8 @@ approach broke in a specific way.
 4. Reusable config templates (docker-compose, Caddyfile, Samba shares, systemd
    units, the dropbox watcher script) live in [`config/`](config/) — copy and
    adapt, don't copy-paste blindly.
+5. **AI agents (Cursor, Claude Code, etc.):** start at [`AGENTS.md`](AGENTS.md)
+   for repo layout, conventions, and boundaries.
 
 ## Reference hardware
 
