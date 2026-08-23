@@ -126,9 +126,10 @@ curl -X POST http://<nas-ip>:2283/api/auth/admin-sign-up \
 ```
 
 Complete Jellyfin's setup wizard at `http://<nas-ip>:8096` (or via its
-`/Startup/*` API endpoints — see Jellyfin's API docs), then add `Music` and
-`Movies` libraries pointing at `/data/music` and `/data/movies` respectively
-(the container paths, mapped to the ZFS datasets via the compose file).
+`/Startup/*` API endpoints — see Jellyfin's API docs), then add `Music`,
+`Movies`, and `TV Shows` libraries pointing at `/data/music`, `/data/movies`,
+and `/data/tv` respectively (the container paths, mapped to the ZFS datasets
+via the compose file).
 
 ## 4. Samba (family file access)
 
@@ -145,8 +146,8 @@ sudo smbpasswd -a <name>     # prompts for a password interactively
 
 Ensure the ZFS datasets have the right group/permissions before first use:
 ```bash
-sudo chgrp familymedia /tank/media/movies /tank/media/music /tank/backups/timemachine
-sudo chmod 2775 /tank/media/movies /tank/media/music /tank/backups/timemachine
+sudo chgrp familymedia /tank/media/movies /tank/media/tv /tank/media/music /tank/backups/timemachine
+sudo chmod 2775 /tank/media/movies /tank/media/tv /tank/media/music /tank/backups/timemachine
 ```
 
 Append the share definitions from
@@ -219,9 +220,10 @@ stall, not a real performance problem.
   (`npm install -g @immich/cli`, then `immich login-key <url>/api <api-key>` and
   `immich upload --recursive <folder>`) rather than dragging thousands of files
   through the browser.
-- **Movies**: [Infuse](https://firecore.com/infuse) (paid, uses native Apple
-  playback) or [Swiftfin](https://github.com/jellyfin/Swiftfin) (free,
-  open-source) pointed at `http://media.local`.
+- **Movies & TV**: [Infuse](https://firecore.com/infuse) (paid, uses native
+  Apple playback) or [Swiftfin](https://github.com/jellyfin/Swiftfin) (free,
+  open-source) pointed at `http://media.local` — both browse every Jellyfin
+  library, not just movies.
 - **Music**: [Finamp](https://github.com/jmshrv/finamp) or Amperfy — both
   support offline caching and native CarPlay integration.
 - **File uploads**: Finder → `⌘K` → `smb://nas.local` (or click the server

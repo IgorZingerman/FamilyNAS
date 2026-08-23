@@ -1,5 +1,5 @@
 #
-# Reference stack: Immich (photos/videos) + Jellyfin (movies/music).
+# Reference stack: Immich (photos/videos) + Jellyfin (movies/TV/music).
 #
 # The immich-server / immich-machine-learning / redis / database services below
 # are Immich's own official compose services, reproduced here as a snapshot for
@@ -86,6 +86,7 @@ services:
       - /var/lib/jellyfin/config:/config
       - /var/lib/jellyfin/cache:/cache
       - /tank/media/movies:/data/movies:ro
+      - /tank/media/tv:/data/tv:ro
       - /tank/media/music:/data/music:ro
     devices:
       - /dev/dri:/dev/dri   # Intel QuickSync passthrough; omit if no compatible iGPU

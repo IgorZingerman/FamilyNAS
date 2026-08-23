@@ -31,9 +31,10 @@ consistent about it across your own Caddyfile, Samba config, and mDNS aliases.
 | App | Purpose | URL (example) |
 |---|---|---|
 | [Immich](https://immich.app/) | Photo/video library, Apple Photos replacement, mobile auto-backup | `http://photos.local` |
-| [Jellyfin](https://jellyfin.org/) | Movies & music streaming | `http://media.local` |
+| [Jellyfin](https://jellyfin.org/) | Movies, TV, & music streaming | `http://media.local` |
 | Samba (`smbd`) | Family upload access from Finder/Explorer | `smb://nas.local` |
 | Dropbox watcher | Auto-imports files dropped into the share into Immich/Jellyfin, attributed to whoever dropped them | `smb://nas.local/dropbox` |
+| Time Machine (Samba) | Network backup destination for every family Mac, one shared quota-capped share | `smb://nas.local/timemachine` |
 | [Caddy](https://caddyserver.com/) | Reverse proxy — turns ports into names | `http://nas.local` |
 
 ## Architecture at a glance
@@ -50,7 +51,7 @@ flowchart TB
         caddy["Caddy reverse proxy\n:80"]
         immich["Immich stack\n(server + ML + Postgres + Valkey)"]
         jellyfin["Jellyfin"]
-        smb["Samba\nmovies / music / timemachine / dropbox shares"]
+        smb["Samba\nmovies / tv / music / timemachine / dropbox shares"]
         watcher["Dropbox watcher\n(inotify-triggered)"]
         zfs["ZFS pool\nmirror + mirror, USB-attached HDDs"]
         ssd["Boot SSD\nPostgres data + transcode cache"]
@@ -90,8 +91,10 @@ approach broke in a specific way.
 3. Keep [`docs/troubleshooting.md`](docs/troubleshooting.md) open — it documents
    every non-obvious failure we hit (Docker's silent bind-mount behavior, two
    separate Avahi/mDNS bugs, a JavaScript falsy-string trap, Immich's reverse-proxy
-   limitations, a `curl`-exit-code trap in the dropbox watcher) so you don't
-   have to debug them from scratch.
+   limitations, a `curl`-exit-code trap in the dropbox watcher, Firefox's
+   DNS-over-HTTPS breaking `.local` hostnames, a `shutil.copy2()` slowdown
+   against non-standard filesystems) so you don't have to debug them from
+   scratch.
 4. Reusable config templates (docker-compose, Caddyfile, Samba shares, systemd
    units, the dropbox watcher script) live in [`config/`](config/) — copy and
    adapt, don't copy-paste blindly.

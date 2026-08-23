@@ -292,18 +292,18 @@ deleted, in keeping with a broader "never delete automatically, always
 quarantine" philosophy: automated pipelines that silently delete originals are
 one bug away from data loss, and a dated archive folder costs little to keep.
 
-**Movies/music are moved, not copied.** Unlike photos, the dropbox file *is*
-becoming its final canonical copy at `/tank/media/movies` or `/music` — there's
-nothing else to preserve, so a plain move is correct.
+**Movies/TV/music are moved, not copied.** Unlike photos, the dropbox file *is*
+becoming its final canonical copy at `/tank/media/movies`, `/tv`, or `/music`
+— there's nothing else to preserve, so a plain move is correct.
 
 **Failures never disappear silently.** Any error — upload failed, unrecognized
 file extension, missing credentials for that uploader — moves the file to
 `failed/<category>/` and logs the reason. A file that's left stuck in place
 looks like "nothing happened" to whoever dropped it; a file that's silently
 deleted on error is far worse. Every event (success or failure) is logged with
-timestamp, uploader, category, filename, and outcome — for movies/music this
-log is the *only* record of who uploaded what, since Jellyfin has no per-file
-uploader concept of its own.
+timestamp, uploader, category, filename, and outcome — for movies/TV/music
+this log is the *only* record of who uploaded what, since Jellyfin has no
+per-file uploader concept of its own.
 
 **Per-person Immich attribution requires per-person API keys.** For a dropped
 photo to show up owned by the actual person in Immich (not one shared
@@ -346,7 +346,7 @@ done here to keep scope small):
 
 | System | Login style | Scope |
 |---|---|---|
-| Samba shares | Linux system accounts (no shell) | File access to `movies`/`music`/`timemachine`/`dropbox` shares |
+| Samba shares | Linux system accounts (no shell) | File access to `movies`/`tv`/`music`/`timemachine`/`dropbox` shares |
 | Jellyfin | Its own username/password | Media library access |
 | Immich | Email/password | Photo library access |
 
