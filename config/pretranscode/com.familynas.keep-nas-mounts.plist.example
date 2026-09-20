@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Copy to ~/Library/LaunchAgents/com.familynas.keep-nas-mounts.plist
+  Edit WorkingDirectory and python path, then:
+
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.familynas.keep-nas-mounts.plist
+
+  Unload:
+
+    launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.familynas.keep-nas-mounts.plist
+
+  Only install this while a long encode is running. The script skips itself
+  when the NAS is unreachable and backs off, but an always-on loop on a laptop
+  still keeps SMB connections open and can drain the battery in sleep. No
+  KeepAlive on purpose: a crash should not respawn a remount loop.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.familynas.keep-nas-mounts</string>
+  <key>WorkingDirectory</key>
+  <string>/Users/YOU/Projects/UnDeadDrobo</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/python3</string>
+    <string>scripts/keep_nas_mounts.py</string>
+    <string>--loop</string>
+    <string>--interval</string>
+    <string>30</string>
+    <string>--apply</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/YOU/Projects/UnDeadDrobo/logs/keep-nas-mounts.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/YOU/Projects/UnDeadDrobo/logs/keep-nas-mounts.log</string>
+</dict>
+</plist>
