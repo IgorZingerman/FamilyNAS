@@ -1,0 +1,26 @@
+---
+description: FamilyNAS repo basics — secrets, data safety, doc pointers
+alwaysApply: true
+---
+
+# FamilyNAS project basics
+
+Read [AGENTS.md](../../AGENTS.md) first for layout, boundaries, and doc index.
+
+## Never commit
+
+- `.env`, API keys, per-person Immich credential files
+- `scan_results/`, `logs/`, `*.csv` manifests, `scripts/.queue_watch_history.json`
+- Personal diagnostic dumps (`scripts/drobo_diagnostic_*.txt`)
+
+## Data safety
+
+- Recovery and cleanup scripts **default to dry-run**; require `--apply` for writes
+- **Never hard-delete** — quarantine, archive, skip, or Immich soft-trash only
+- Ask before running `--apply` against live NAS paths (`/tank/…`) or Immich API mutations
+
+## Where things live
+
+- Deploy templates: `config/` (canonical `dropbox-watcher.py`)
+- Recovery/maintenance scripts: `scripts/`
+- Long-form reasoning: `docs/architecture.md`, `docs/troubleshooting.md`
